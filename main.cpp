@@ -5,7 +5,6 @@
 
 using namespace std;
 
-
 // Global variables definition
 
 bool verbose = false;
@@ -22,8 +21,9 @@ void getParams(string * username, string * password, int argc, char ** argv);
 
 // Program
 
-void debug(const string& str, bool force=false) {
-    if (verbose&&!force) cout << endl << str << endl;
+template <typename T>
+void debug(const T& str, bool force=false) {
+    if (verbose||force) cout << endl << str << endl;
 }
 
 bool isRegistered(string username, string password) {
@@ -31,6 +31,24 @@ bool isRegistered(string username, string password) {
 }
 
 int registerUser(string username, string password) {
+    ofstream codeFile;
+    codeFile.open("code.txt");
+    int code = generateCode();
+    int ucode;
+    debug(code);
+
+    codeFile << code;
+    codeFile.close();
+
+    cout << "Please, enter code from code.txt: ";
+    cin >> ucode;
+
+    if (code!=ucode) {
+        debug("Wrong code!", true);
+        return 0;
+    }
+
+    remove("code.txt");
     return 1;
 }
 
@@ -39,7 +57,7 @@ int login(string username, string password) {
 }
 
 int generateCode() {
-    return rand()%7;
+    return 100000 + rand()%(999999-100000+1);
 }
 
 void getParams(string * username, string * password, int argc, char ** argv) {
