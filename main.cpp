@@ -45,10 +45,27 @@ int registerUser(string username, string password) {
 
     if (code!=ucode) {
         debug("Wrong code!", true);
+        remove("code.txt");
         return 0;
     }
-
     remove("code.txt");
+
+    FILE * usersFile;
+
+    if (1) {
+//        fclose(usersFile);
+        usersFile=fopen("users.dat", "wb");
+        int number_of_users = 1;
+        string users[1] = {username};
+        string passwords[1] = {password};
+        fwrite(&number_of_users, sizeof(int),  1, usersFile);
+        fwrite(users, sizeof(string), 1, usersFile);
+        fwrite(passwords, sizeof(string), 1, usersFile);
+        fclose(usersFile);
+    }
+
+
+
     return 1;
 }
 
