@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <string>
 #include <fstream>
+#include <ctime>
 
 #include "sha256.h"
 
@@ -14,13 +15,15 @@ bool verbose = false;
 
 // Functions definition
 
-void debug(const string&str, bool force);
 bool isRegistered(const string& username, const string& password);
+bool checkFileHash(const string& filename, bool repair);
 int registerUser(string username, string password);
 int login (string username, string password);
 int generateCode();
 void getParams(string * username, string * password, int argc, char ** argv);
+void debug(const string&str, bool force);
 string getFileHash(const string& filename);
+string getCurrentDateTime();
 
 // Program
 
@@ -29,7 +32,39 @@ void debug(const T& str, bool force=false) {
     if (verbose||force) cout << endl << str << endl;
 }
 
+bool checkFileHash(const string& filename, bool repair=false) {
+    ifstream file(filename);
+}
+
+string getCurrentDateTime() {
+    time_t rawtime;
+    struct tm * timeinfo;
+    char buffer[80];
+
+    time (&rawtime);
+    timeinfo = localtime(&rawtime);
+
+    strftime(buffer,sizeof(buffer),"%d-%m-%Y %H:%M:%S",timeinfo);
+
+    string str(buffer);
+    return str;
+}
+
 bool isRegistered(const string& username, const string& password) {
+    FILE * usersFile;
+    string filename = "users.dat";
+    string fileHash = getFileHash(filename);
+    fopen("users.dat", "rb");
+
+    if (!checkFileHash(filename)) {
+        debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
+        ofstream log("log.txt");
+
+        log << "Users data file broken! This accident appeared at: " << getCurrentDateTime();
+
+        exit(1);
+    }
+
     return false;
 }
 
@@ -98,7 +133,7 @@ int registerUser(string username, string password) {
         return 1;
     }
     debug("Registration failed!", true);
-    
+
     return 0;
 }
 
@@ -124,16 +159,13 @@ void getParams(string * username, string * password, int argc, char ** argv) {
                 case 3:
                     if (argvs == "-v") verbose = true;
                     break;
-                default:
-                    debug("Arguments parsing error!", true);
-                    break;
             }
         }
         return;
     }
     cout << "Enter username: ";
     cin >> *username;
-    cout << "Enter password";
+    cout << "Enter password: ";
     cin >> *password;
 }
 
