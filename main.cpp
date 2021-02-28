@@ -3,6 +3,8 @@
 #include <string>
 #include <fstream>
 
+#include "sha256.h"
+
 using namespace std;
 
 // Global variables definition
@@ -13,11 +15,12 @@ bool verbose = false;
 // Functions definition
 
 void debug(const string&str, bool force);
-bool isRegistered(string username, string password);
+bool isRegistered(const string& username, const string& password);
 int registerUser(string username, string password);
 int login (string username, string password);
 int generateCode();
 void getParams(string * username, string * password, int argc, char ** argv);
+string getFileHash(const string& filename);
 
 // Program
 
@@ -26,8 +29,21 @@ void debug(const T& str, bool force=false) {
     if (verbose||force) cout << endl << str << endl;
 }
 
-bool isRegistered(string username, string password) {
+bool isRegistered(const string& username, const string& password) {
     return false;
+}
+
+string getFileHash(const string& filename) {
+    ifstream data;
+    unsigned char x;
+    string hashed;
+
+    data.open(filename, ios::binary);
+    while (data >> x)
+        hashed += x;
+    hashed = sha256(hashed);
+    data.close();
+    return hashed;
 }
 
 int registerUser(string username, string password) {
@@ -53,20 +69,37 @@ int registerUser(string username, string password) {
     FILE * usersFile;
 
     if (1) {
-//        fclose(usersFile);
+        string hashed = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
         usersFile=fopen("users.dat", "wb");
         int number_of_users = 1;
-        string users[1] = {username};
-        string passwords[1] = {password};
+        string users[1] = {sha256(username)};
+        string passwords[1] = {sha256(password)};
+        fwrite(&hashed, sizeof(string), 1, usersFile);
         fwrite(&number_of_users, sizeof(int),  1, usersFile);
         fwrite(users, sizeof(string), 1, usersFile);
+        fwrite(&hashed, sizeof(string), 1, usersFile);
         fwrite(passwords, sizeof(string), 1, usersFile);
+        fwrite(&hashed, sizeof(string), 1, usersFile);
         fclose(usersFile);
+
+        // Calculate file hash sum
+        hashed = getFileHash("users.dat");
+
+        // Write hash sum to file
+
+        usersFile = fopen("users.dat", "rb+");
+        fseek(usersFile, 0, SEEK_SET);
+        fwrite(&hashed, sizeof(string), 1, usersFile);
+        fseek(usersFile, sizeof(string) + sizeof(int), SEEK_CUR);
+        fwrite(&hashed, sizeof(string), 1, usersFile);
+        fseek(usersFile, 0, SEEK_END);
+        fwrite(&hashed, sizeof(string), 1, usersFile);
+        debug("Registration successful!", true);
+        return 1;
     }
-
-
-
-    return 1;
+    debug("Registration failed!", true);
+    
+    return 0;
 }
 
 int login(string username, string password) {
@@ -103,6 +136,8 @@ void getParams(string * username, string * password, int argc, char ** argv) {
     cout << "Enter password";
     cin >> *password;
 }
+
+
 
 int main(int argc, char ** argv) {
     string username, password;

@@ -3,4 +3,4 @@ project(UserAuth)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(UserAuth main.cpp)
+add_executable(UserAuth main.cpp sha256.h sha256.cpp)
