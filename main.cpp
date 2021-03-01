@@ -11,12 +11,13 @@ using namespace std;
 // Global variables definition
 
 bool verbose = false;
+const string zero_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 
 // Functions definition
 
 bool isRegistered(const string& username, const string& password);
-bool checkFileHash(const string& filename, bool repair);
+bool checkFileHash(const string& filename, FILE * b_file, bool repair);
 int registerUser(string username, string password);
 int login (string username, string password);
 int generateCode();
@@ -32,8 +33,44 @@ void debug(const T& str, bool force=false) {
     if (verbose||force) cout << endl << str << endl;
 }
 
-bool checkFileHash(const string& filename, bool repair=false) {
+void filecopy(FILE *dest, FILE *src)
+{
+    const int size = 16384;
+    char buffer[size];
+
+    while (!feof(src))
+    {
+        int n = fread(buffer, 1, size, src);
+        fwrite(buffer, 1, n, dest);
+    }
+
+    fflush(dest);
+}
+
+bool checkFileHash(const string& filename, FILE * b_file, bool repair=false) {
     ifstream file(filename);
+    FILE * tmp = fopen(".tmp.dat", "wb+");
+    int number_of_users;
+    string hash;
+    filecopy(tmp, b_file);
+
+    fseek(tmp, 0, SEEK_SET);
+    fseek(b_file, 0, SEEK_SET);
+
+    fread(&hash, sizeof(string), 1, b_file);
+
+    fwrite(&zero_hash, sizeof(string), 1, tmp);
+    fread(&number_of_users, sizeof(int), 1, tmp);
+    fseek(tmp, number_of_users*sizeof(string), SEEK_CUR);
+    fwrite(&zero_hash, sizeof(string), 1, tmp);
+    fseek(tmp, 0, SEEK_END);
+    fwrite(&zero_hash, sizeof(string), 1, tmp);
+
+
+    fclose(tmp);
+    remove(".tmp.dat");
+
+    return(hash==getFileHash(filename));
 }
 
 string getCurrentDateTime() {
@@ -54,9 +91,9 @@ bool isRegistered(const string& username, const string& password) {
     FILE * usersFile;
     string filename = "users.dat";
     string fileHash = getFileHash(filename);
-    fopen("users.dat", "rb");
+    usersFile = fopen("users.dat", "rb");
 
-    if (!checkFileHash(filename)) {
+    if (!checkFileHash(filename, usersFile)) {
         debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
         ofstream log("log.txt");
 
@@ -104,7 +141,7 @@ int registerUser(string username, string password) {
     FILE * usersFile;
 
     if (1) {
-        string hashed = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        string hashed = zero_hash;
         usersFile=fopen("users.dat", "wb");
         int number_of_users = 1;
         string users[1] = {sha256(username)};
