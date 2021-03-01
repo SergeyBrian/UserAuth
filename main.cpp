@@ -88,11 +88,13 @@ string getCurrentDateTime() {
 }
 
 bool isRegistered(const string& username, const string& password) {
+    debug("Checking if user is registered");
     FILE * usersFile;
     string filename = "users.dat";
     string fileHash = getFileHash(filename);
     usersFile = fopen("users.dat", "rb");
-
+    ifstream check(filename);
+    if(!check) return false;
     if (!checkFileHash(filename, usersFile)) {
         debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
         ofstream log("log.txt");
@@ -106,6 +108,7 @@ bool isRegistered(const string& username, const string& password) {
 }
 
 string getFileHash(const string& filename) {
+    debug("Getting hash for file " + filename);
     ifstream data;
     unsigned char x;
     string hashed;
@@ -119,6 +122,7 @@ string getFileHash(const string& filename) {
 }
 
 int registerUser(string username, string password) {
+    debug("Registering user");
     ofstream codeFile;
     codeFile.open("code.txt");
     int code = generateCode();
