@@ -11,7 +11,7 @@ using namespace std;
 // Global variables definition
 
 bool verbose = false;
-const string zero_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4hash_length9b934ca495991b7852b855";
+const string zero_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const int hash_length = 64;
 
 
@@ -47,8 +47,7 @@ bool compare(const char * a, const char * b) {
 }
 
 void stringToArray(char * array, const string& str) {
-    size_t length = str.length() + 1;
-    array = new char[length];
+    array = new char[64];
     strcpy(array, str.c_str());
 }
 
@@ -120,7 +119,7 @@ bool checkFileHash(const string& filename, FILE * b_file, bool repair=false) {
     filecopy(tmp, b_file);
 
     fseek(tmp, 0, SEEK_SET);
-    fseek(b_file, sizeof(string), SEEK_SET);
+    fseek(b_file, sizeof(char)*64, SEEK_SET);
 
     fread(&number_of_users, sizeof(int), 1, b_file);
 
@@ -210,7 +209,7 @@ bool isRegistered(const string& username, const string& password) {
 
     int number_of_users;
 
-    fseek(usersFile, sizeof(string), SEEK_SET);
+    fseek(usersFile, sizeof(char)*64, SEEK_SET);
     fread(&number_of_users, sizeof(int), 1, usersFile);
 
     debug(number_of_users + " users found");
@@ -258,9 +257,17 @@ int registerUser(string username, string password) {
     if (1) {
         string hashed = zero_hash;
         usersFile=fopen("users.dat", "wb");
+        char users[1] = {*stringToArray(sha256(username))};
+        char passwords[1] = {*stringToArray(sha256(password))};
         int number_of_users = 1;
-        string users[1] = {sha256(username)};
-        string passwords[1] = {sha256(password)};
+
+        fseek(usersFile, sizeof(char)*64, SEEK_SET);
+        fwrite(&number_of_users, sizeof(int), 1, usersFile);
+        fwrite(users, sizeof(char), 64*number_of_users, usersFile);
+        fseek(usersFile, sizeof(char)*64, SEEK_CUR);
+        fwrite(passwords, sizeof(char), 64*number_of_users, usersFile);
+        fseek(usersFile, 0, SEEK_SET);
+
         writeHash(usersFile, hashed, 1);
 //        fwrite(&hashed, sizeof(string), 1, usersFile);
 //        fwrite(&number_of_users, sizeof(int),  1, usersFile);
