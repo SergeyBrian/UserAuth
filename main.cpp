@@ -23,6 +23,7 @@ int login (string username, string password);
 int generateCode();
 void getParams(string * username, string * password, int argc, char ** argv);
 void debug(const string&str, bool force);
+void writeHash(FILE * file, const string& hash, int number_of_users);
 string getFileHash(const string& filename);
 string getCurrentDateTime();
 
@@ -47,30 +48,71 @@ void filecopy(FILE *dest, FILE *src)
     fflush(dest);
 }
 
+void writeHash(FILE * file, const string& hash, int number_of_users) {
+    fseek(file, 0, SEEK_SET);
+    fwrite(&hash, sizeof(string), number_of_users, file);
+    fseek(file, sizeof(string) + sizeof(int), SEEK_CUR);
+    fwrite(&hash, sizeof(string), number_of_users, file);
+    fseek(file, -sizeof(string), SEEK_END);
+    fwrite(&hash, sizeof(string), number_of_users, file);
+}
+
 bool checkFileHash(const string& filename, FILE * b_file, bool repair=false) {
+    debug("Checking file hash");
     ifstream file(filename);
     FILE * tmp = fopen(".tmp.dat", "wb+");
     int number_of_users;
-    string hash;
+    string hash, hash1, hash2, realHash;
     filecopy(tmp, b_file);
 
     fseek(tmp, 0, SEEK_SET);
     fseek(b_file, 0, SEEK_SET);
 
+    fread(&number_of_users, sizeof(int), 1, b_file);
     fread(&hash, sizeof(string), 1, b_file);
+    fseek(b_file, number_of_users*sizeof(string), SEEK_CUR);
+    fread(&hash1, sizeof(string), 1, b_file);
+    fseek(b_file, -sizeof(string), SEEK_END);
+    fread(&hash2, sizeof(string), 1, b_file);
+    fclose(b_file);
+
+    debug("First hash: " + hash);
+    debug("Second hash: " + hash1);
+    debug("Third hash: " + hash2);
+
+    if (repair && (hash!=hash1||hash!=hash2||hash1!=hash2)) {
+        debug("Hash is damaged and will be repaired!");
+        if (hash != hash1 && hash1 != hash2 && hash != hash2) return false;
+        string trueHash;
+        if (hash != hash1 && hash1 == hash2) {
+            // First hash is broken
+            trueHash = hash1;
+        }
+        if (hash1 != hash2 && hash == hash2) {
+            // Second hash is broken
+            trueHash = hash;
+        }
+        if (hash2 != hash && hash == hash1) {
+            // Third hash is broken
+            trueHash = hash1;
+        }
+        writeHash(b_file, trueHash, number_of_users);
+        debug("Hash successfully repaired!");
+        realHash = trueHash;
+    }
 
     fwrite(&zero_hash, sizeof(string), 1, tmp);
-    fread(&number_of_users, sizeof(int), 1, tmp);
     fseek(tmp, number_of_users*sizeof(string), SEEK_CUR);
     fwrite(&zero_hash, sizeof(string), 1, tmp);
     fseek(tmp, 0, SEEK_END);
     fwrite(&zero_hash, sizeof(string), 1, tmp);
 
-
+    realHash = getFileHash(".tmp.dat");
     fclose(tmp);
     remove(".tmp.dat");
 
-    return(hash==getFileHash(filename));
+    return (hash == realHash);
+
 }
 
 string getCurrentDateTime() {
@@ -95,14 +137,24 @@ bool isRegistered(const string& username, const string& password) {
     usersFile = fopen("users.dat", "rb");
     ifstream check(filename);
     if(!check) return false;
-    if (!checkFileHash(filename, usersFile)) {
+    debug("Data file exists");
+    if (!checkFileHash(filename, usersFile, true)) {
         debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
-        ofstream log("log.txt");
+        ofstream log("log.txt", ios::app);
 
         log << "Users data file broken! This accident appeared at: " << getCurrentDateTime();
+        log.close();
 
         exit(1);
     }
+    debug("Hash check OK. Decoding users data");
+
+    int number_of_users;
+
+    fseek(usersFile, sizeof(string), SEEK_SET);
+    fread(&number_of_users, sizeof(int), 1, usersFile);
+
+    debug(number_of_users + " users found");
 
     return false;
 }
@@ -164,12 +216,7 @@ int registerUser(string username, string password) {
         // Write hash sum to file
 
         usersFile = fopen("users.dat", "rb+");
-        fseek(usersFile, 0, SEEK_SET);
-        fwrite(&hashed, sizeof(string), 1, usersFile);
-        fseek(usersFile, sizeof(string) + sizeof(int), SEEK_CUR);
-        fwrite(&hashed, sizeof(string), 1, usersFile);
-        fseek(usersFile, 0, SEEK_END);
-        fwrite(&hashed, sizeof(string), 1, usersFile);
+        writeHash(usersFile, zero_hash, 1);
         debug("Registration successful!", true);
         return 1;
     }
