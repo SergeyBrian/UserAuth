@@ -99,8 +99,8 @@ void writeHash(FILE * file, const char * hash, int number_of_users) {
 bool checkFileHash(FILE * b_file, bool repair=false) {
     debug("Checking file hash");
     FILE * tmp = fopen(".tmp.dat", "wb+");
-    b_file = fopen("users.dat", "rb");
-    int number_of_users = 15;
+    b_file = fopen("users.dat", "rb+");
+    int number_of_users;
     char hash[64], hash1[64], hash2[64], realHash[64];
     filecopy(tmp, b_file);
 
@@ -114,16 +114,18 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
     fread(hash1, sizeof(char), 64, b_file);
     fseek(b_file, number_of_users*sizeof(char)*64, SEEK_CUR);
     fread(hash2, sizeof(char), 64, b_file);
-    fclose(b_file);
 
 //    debug("First hash: ");
 //    debug("Second hash: ");
 //    debug("Third hash: ");
 
-    if (repair && !(compare(hash,hash1)||compare(hash,hash2)||compare(hash1,hash2))) {
+    if (repair && !(compare(hash,hash1)&&compare(hash,hash2)&&compare(hash1,hash2))) {
+        if (!(compare(hash,hash1)||compare(hash1,hash2)||compare(hash,hash2))) {
+            debug("Can't repair");
+            return false;
+        }
+        char * trueHash;
         debug("Hash is damaged and will be repaired!");
-        if (!(compare(hash,hash1)&&compare(hash1,hash2)&&compare(hash,hash2))) return false;
-        char trueHash[64];
         if (compare(hash1,hash2)&&!compare(hash, hash1)) {
             // First hash is broken
             equate(trueHash, hash1);
@@ -138,7 +140,7 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
         }
         writeHash(b_file, trueHash, number_of_users);
         debug("Hash successfully repaired!");
-        equate(realHash,trueHash);
+        equate(hash,trueHash);
     }
 
 //    fwrite(&zero_hash, sizeof(char), 64, tmp);
@@ -148,10 +150,11 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
 //    fwrite(&zero_hash, sizeof(char), 64, tmp);
 
     writeHash(tmp, stringToArray(zero_hash), number_of_users);
-
-    equate(realHash,stringToArray(getFileHash(".tmp.dat")));
     fclose(tmp);
-    remove(".tmp.dat");
+    cout << getFileHash(".tmp.dat");
+    equate(realHash, stringToArray(getFileHash(".tmp.dat")));
+
+//    remove(".tmp.dat");
 
     return (compare(hash, realHash));
 
@@ -184,7 +187,7 @@ bool isRegistered(const string& username, const string& password) {
         debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
         ofstream log("log.txt", ios::app);
 
-        log << "Users data file broken! This accident appeared at: " << getCurrentDateTime();
+        log << "\nUsers data file broken! This accident appeared at: " << getCurrentDateTime();
         log.close();
 
         exit(1);
@@ -215,6 +218,30 @@ string getFileHash(const string& filename) {
     return hashed;
 }
 
+char ** readUsers(FILE * file, int n, bool reg=false) {
+    char ** users;
+
+    users = new char * [n+(int)reg];
+    for (int i = 0; i < n; i ++) {
+        users[i] = new char [64];
+        fread(users[i], sizeof(char), 64, file);
+    }
+
+    return users;
+}
+
+char ** readPasswords(FILE * file, int n, bool reg=false) {
+    char ** passwords;
+
+    passwords = new char * [n+(int)reg];
+    for (int i = 0; i < n; i ++) {
+        passwords[i] = new char [64];
+        fread(passwords[i], sizeof(char), 64, file);
+    }
+
+    return passwords;
+}
+
 int registerUser(string username, string password) {
     debug("Registering user");
     ofstream codeFile;
@@ -238,7 +265,8 @@ int registerUser(string username, string password) {
 
     FILE * usersFile;
 
-    if (1) {
+    ifstream check("users.dat");
+    if (!check) {
         string hashed = zero_hash;
         usersFile=fopen("users.dat", "wb");
 
@@ -266,16 +294,33 @@ int registerUser(string username, string password) {
 
         // Calculate file hash sum
         hashed = getFileHash("users.dat");
+        cout << hashed;
 
         // Write hash sum to file
 
-        usersFile = fopen("users.dat", "rb+");
-        writeHash(usersFile, stringToArray(zero_hash), 1);
+        writeHash(usersFile, stringToArray(hashed), 1);
         debug("Registration successful!", true);
         fclose(usersFile);
         return 1;
     }
-    debug("Registration failed!", true);
+    check.close();
+
+    usersFile = fopen("users.dat", "rb");
+
+    int number_of_users;
+    fseek(usersFile, sizeof(char) * 64, SEEK_SET);
+    fread(&number_of_users, sizeof(int), 1, usersFile);
+    char ** users = readUsers(usersFile, number_of_users, true);
+    char ** passwords = readPasswords(usersFile, number_of_users, true);
+
+    fwrite(users, sizeof(char), 64*number_of_users, usersFile);
+    fwrite(stringToArray(sha256(username)), sizeof(char), 64, usersFile);
+    fwrite(passwords,sizeof(char), 64*number_of_users, usersFile);
+    fwrite(stringToArray(sha256(password)), sizeof(char), 64, usersFile);
+
+    writeHash(usersFile, stringToArray(zero_hash), number_of_users);
+    string hash = getFileHash("users.dat");
+    writeHash(usersFile, stringToArray(hash), number_of_users);
 
     return 0;
 }
