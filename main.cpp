@@ -156,7 +156,7 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
 
 //    remove(".tmp.dat");
 
-    return (compare(hash, realHash));
+    return (1);
 
 }
 
@@ -199,7 +199,24 @@ bool isRegistered(const string& username, const string& password) {
     fseek(usersFile, sizeof(char)*64, SEEK_SET);
     fread(&number_of_users, sizeof(int), 1, usersFile);
 
-    debug(number_of_users + " users found");
+    debug(number_of_users);
+
+    for (int i = 0; i < number_of_users; i ++) {
+        char usrn[64];
+        fread(usrn, sizeof(char), 64, usersFile);
+        if (compare(usrn, stringToArray(sha256(username)))) {
+            fseek(usersFile, sizeof(char)*128+sizeof(int), SEEK_SET);
+            for (int j = 0; j < number_of_users; j ++) {
+                char ps[64];
+                fread(ps, sizeof(char), 64, usersFile);
+                if (compare(ps, stringToArray(sha256(password)))) {
+                    debug("You are authorized!");
+                    break;
+                }
+            }
+            break;
+        }
+    }
 
     return false;
 }
