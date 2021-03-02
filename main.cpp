@@ -10,7 +10,7 @@ using namespace std;
 
 // Global variables definition
 
-bool verbose = false;
+bool verbose = true;
 const string zero_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const int hash_length = 64;
 
@@ -18,14 +18,13 @@ const int hash_length = 64;
 // Functions definition
 
 bool isRegistered(const string& username, const string& password);
-bool checkFileHash(const string& filename, FILE * b_file, bool repair);
+bool checkFileHash(FILE * b_file, bool repair);
 bool compare(const char * a, const char * b);
 int registerUser(string username, string password);
 int login (string username, string password);
 int generateCode();
 void getParams(string * username, string * password, int argc, char ** argv);
 void debug(const string&str, bool force);
-void writeHash(FILE * file, const string& hash, int number_of_users);
 void writeHash(FILE * file, const char * hash, int number_of_users);
 void stringToArray(char * arr, const string& str);
 void equate(char * a, const char * b);
@@ -78,8 +77,6 @@ void filecopy(FILE *ft, FILE *fs)
         fputc(ch, ft);
         ch = fgetc(fs);
     }
-    fclose(fs);
-    fclose(ft);
     debug("File copied!");
 }
 
@@ -88,48 +85,35 @@ void equate(char * a, const char * b) {
         a[i] = b[i];
 }
 
-void writeHash(FILE * file, const string& hash, int number_of_users) {
-    debug("Writing hash " + hash);
-    char * arr;
-    stringToArray(arr, hash);
-    fseek(file, 0, SEEK_SET);
-    fwrite(arr, sizeof(char), hash_length, file);
-    fseek(file, sizeof(char)*number_of_users*hash_length + sizeof(int), SEEK_CUR);
-    fwrite(arr, sizeof(char), hash_length, file);
-    fseek(file, -hash_length*sizeof(char), SEEK_END);
-    fwrite(arr, sizeof(char), hash_length, file);
-    debug("Hash written!");
-}
-
 void writeHash(FILE * file, const char * hash, int number_of_users) {
+    debug(number_of_users);
     fseek(file, 0, SEEK_SET);
     fwrite(hash, sizeof(char), hash_length, file);
     fseek(file, sizeof(char)*number_of_users*hash_length + sizeof(int), SEEK_CUR);
     fwrite(hash, sizeof(char), hash_length, file);
-    fseek(file, -hash_length*sizeof(char), SEEK_END);
+    fseek(file, sizeof(char)*number_of_users*hash_length, SEEK_CUR);
     fwrite(hash, sizeof(char), hash_length, file);
     debug("Hash written!");
 }
 
-bool checkFileHash(const string& filename, FILE * b_file, bool repair=false) {
-    debug("Checking file hash for file " + filename);
+bool checkFileHash(FILE * b_file, bool repair=false) {
+    debug("Checking file hash");
     FILE * tmp = fopen(".tmp.dat", "wb+");
-    int number_of_users;
+    b_file = fopen("users.dat", "rb");
+    int number_of_users = 15;
     char hash[64], hash1[64], hash2[64], realHash[64];
     filecopy(tmp, b_file);
 
     fseek(tmp, 0, SEEK_SET);
-    fseek(b_file, sizeof(char)*64, SEEK_SET);
+    fseek(b_file, 0, SEEK_SET);
 
+    fread(hash, sizeof(char), 64, b_file);
     fread(&number_of_users, sizeof(int), 1, b_file);
-
     debug(number_of_users);
-
-    fread(&hash, sizeof(char), 64, b_file);
     fseek(b_file, number_of_users*sizeof(char)*64, SEEK_CUR);
-    fread(&hash1, sizeof(char), 64, b_file);
-    fseek(b_file, -sizeof(char), SEEK_END);
-    fread(&hash2, sizeof(char), 64, b_file);
+    fread(hash1, sizeof(char), 64, b_file);
+    fseek(b_file, number_of_users*sizeof(char)*64, SEEK_CUR);
+    fread(hash2, sizeof(char), 64, b_file);
     fclose(b_file);
 
 //    debug("First hash: ");
@@ -163,7 +147,7 @@ bool checkFileHash(const string& filename, FILE * b_file, bool repair=false) {
 //    fseek(tmp, 0, SEEK_END);
 //    fwrite(&zero_hash, sizeof(char), 64, tmp);
 
-    writeHash(tmp, zero_hash, number_of_users);
+    writeHash(tmp, stringToArray(zero_hash), number_of_users);
 
     equate(realHash,stringToArray(getFileHash(".tmp.dat")));
     fclose(tmp);
@@ -189,14 +173,14 @@ string getCurrentDateTime() {
 
 bool isRegistered(const string& username, const string& password) {
     debug("Checking if user is registered");
-    FILE * usersFile;
     string filename = "users.dat";
-    string fileHash = getFileHash(filename);
-    usersFile = fopen("users.dat", "rb");
+    FILE * usersFile = fopen("users.dat", "rb");
     ifstream check(filename);
     if(!check) return false;
+    check.close();
     debug("Data file exists");
-    if (!checkFileHash(filename, usersFile, true)) {
+    string fileHash = getFileHash(filename);
+    if (!checkFileHash(usersFile, true)) {
         debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
         ofstream log("log.txt", ios::app);
 
@@ -257,25 +241,28 @@ int registerUser(string username, string password) {
     if (1) {
         string hashed = zero_hash;
         usersFile=fopen("users.dat", "wb");
-        char users[1] = {*stringToArray(sha256(username))};
-        char passwords[1] = {*stringToArray(sha256(password))};
+
+        char * usernames = stringToArray(sha256(username));
+        char * userpasswords = stringToArray(sha256(password));
+
+        char ** users;
+        char ** passwords;
+
+        users = new char * [1];
+        passwords = new char * [1];
+
+        users[0] = {usernames};
+        passwords[0] = {userpasswords};
         int number_of_users = 1;
 
         fseek(usersFile, sizeof(char)*64, SEEK_SET);
         fwrite(&number_of_users, sizeof(int), 1, usersFile);
-        fwrite(users, sizeof(char), 64*number_of_users, usersFile);
+        fwrite(users[0], sizeof(char), 64*number_of_users, usersFile);
         fseek(usersFile, sizeof(char)*64, SEEK_CUR);
-        fwrite(passwords, sizeof(char), 64*number_of_users, usersFile);
+        fwrite(passwords[0], sizeof(char), 64*number_of_users, usersFile);
         fseek(usersFile, 0, SEEK_SET);
 
-        writeHash(usersFile, hashed, 1);
-//        fwrite(&hashed, sizeof(string), 1, usersFile);
-//        fwrite(&number_of_users, sizeof(int),  1, usersFile);
-//        fwrite(users, sizeof(string), 1, usersFile);
-//        fwrite(&hashed, sizeof(string), 1, usersFile);
-//        fwrite(passwords, sizeof(string), 1, usersFile);
-//        fwrite(&hashed, sizeof(string), 1, usersFile);
-//        fclose(usersFile);
+        writeHash(usersFile, stringToArray(hashed), 1);
 
         // Calculate file hash sum
         hashed = getFileHash("users.dat");
@@ -283,8 +270,9 @@ int registerUser(string username, string password) {
         // Write hash sum to file
 
         usersFile = fopen("users.dat", "rb+");
-        writeHash(usersFile, zero_hash, 1);
+        writeHash(usersFile, stringToArray(zero_hash), 1);
         debug("Registration successful!", true);
+        fclose(usersFile);
         return 1;
     }
     debug("Registration failed!", true);
