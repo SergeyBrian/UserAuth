@@ -10,23 +10,20 @@ using namespace std;
 
 // Global variables definition
 
-bool verbose = true;
+bool verbose = false;
 const string zero_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const int hash_length = 64;
 
 
 // Functions definition
 
-bool isRegistered(const string& username, const string& password);
+int login(const string& username, const string& password);
 bool checkFileHash(FILE * b_file, bool repair);
 bool compare(const char * a, const char * b);
 int registerUser(string username, string password);
-int login (string username, string password);
 int generateCode();
 void getParams(string * username, string * password, int argc, char ** argv);
-void debug(const string&str, bool force);
 void writeHash(FILE * file, const char * hash, int number_of_users);
-void stringToArray(char * arr, const string& str);
 void equate(char * a, const char * b);
 string getFileHash(const string& filename);
 string getCurrentDateTime();
@@ -39,15 +36,18 @@ void debug(const T& str, bool force=false) {
     if (verbose||force) cout << endl << str << endl;
 }
 
+template<typename T>
+void printArr(const T& arr) {
+    if (!verbose) return;
+    for (int i = 0; i < 64; i++)
+        cout << arr[i];
+    cout << endl;
+}
+
 bool compare(const char * a, const char * b) {
     for (int i = 0; i < 64; i ++)
         if (a[i]!=b[i]) return false;
     return true;
-}
-
-void stringToArray(char * array, const string& str) {
-    array = new char[64];
-    strcpy(array, str.c_str());
 }
 
 char * stringToArray(const string& str) {
@@ -87,6 +87,7 @@ void equate(char * a, const char * b) {
 
 void writeHash(FILE * file, const char * hash, int number_of_users) {
     debug(number_of_users);
+    printArr(hash);
     fseek(file, 0, SEEK_SET);
     fwrite(hash, sizeof(char), hash_length, file);
     fseek(file, sizeof(char)*number_of_users*hash_length + sizeof(int), SEEK_CUR);
@@ -99,7 +100,7 @@ void writeHash(FILE * file, const char * hash, int number_of_users) {
 bool checkFileHash(FILE * b_file, bool repair=false) {
     debug("Checking file hash");
     FILE * tmp = fopen(".tmp.dat", "wb+");
-    b_file = fopen("users.dat", "rb+");
+//    b_file = fopen("users.dat", "rb+");
     int number_of_users;
     char hash[64], hash1[64], hash2[64], realHash[64];
     filecopy(tmp, b_file);
@@ -115,17 +116,13 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
     fseek(b_file, number_of_users*sizeof(char)*64, SEEK_CUR);
     fread(hash2, sizeof(char), 64, b_file);
 
-//    debug("First hash: ");
-//    debug("Second hash: ");
-//    debug("Third hash: ");
-
     if (repair && !(compare(hash,hash1)&&compare(hash,hash2)&&compare(hash1,hash2))) {
         if (!(compare(hash,hash1)||compare(hash1,hash2)||compare(hash,hash2))) {
             debug("Can't repair");
             return false;
         }
         char * trueHash;
-        debug("Hash is damaged and will be repaired!");
+        debug("Hash is damaged, but can be repaired!");
         if (compare(hash1,hash2)&&!compare(hash, hash1)) {
             // First hash is broken
             equate(trueHash, hash1);
@@ -143,20 +140,13 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
         equate(hash,trueHash);
     }
 
-//    fwrite(&zero_hash, sizeof(char), 64, tmp);
-//    fseek(tmp, number_of_users*sizeof(char)*64, SEEK_CUR);
-//    fwrite(&zero_hash, sizeof(char), 64, tmp);
-//    fseek(tmp, 0, SEEK_END);
-//    fwrite(&zero_hash, sizeof(char), 64, tmp);
-
     writeHash(tmp, stringToArray(zero_hash), number_of_users);
     fclose(tmp);
-    cout << getFileHash(".tmp.dat");
     equate(realHash, stringToArray(getFileHash(".tmp.dat")));
 
-//    remove(".tmp.dat");
+    remove(".tmp.dat");
 
-    return (1);
+    return (compare(hash, realHash));
 
 }
 
@@ -174,51 +164,56 @@ string getCurrentDateTime() {
     return str;
 }
 
-bool isRegistered(const string& username, const string& password) {
+int login(const string& username, const string& password) {
     debug("Checking if user is registered");
     string filename = "users.dat";
-    FILE * usersFile = fopen("users.dat", "rb");
+
     ifstream check(filename);
-    if(!check) return false;
+    if(!check) return 1;
     check.close();
+
     debug("Data file exists");
-    string fileHash = getFileHash(filename);
+
+    FILE * usersFile = fopen("users.dat", "rb");
+
     if (!checkFileHash(usersFile, true)) {
         debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
         ofstream log("log.txt", ios::app);
-
         log << "\nUsers data file broken! This accident appeared at: " << getCurrentDateTime();
         log.close();
+        fclose(usersFile);
 
         exit(1);
     }
-    debug("Hash check OK. Decoding users data");
+    debug("Hash check passed. Decoding users' data");
 
     int number_of_users;
+
+    fclose(usersFile);
+    usersFile = fopen("users.dat", "rb");
 
     fseek(usersFile, sizeof(char)*64, SEEK_SET);
     fread(&number_of_users, sizeof(int), 1, usersFile);
 
     debug(number_of_users);
-
+    int noUser = 1; // 1: user with given name not found; 2: user with given name found
     for (int i = 0; i < number_of_users; i ++) {
         char usrn[64];
+        fseek(usersFile, sizeof(char)*64*(i+1)+sizeof(int), SEEK_SET);
         fread(usrn, sizeof(char), 64, usersFile);
+        printArr(usrn);
         if (compare(usrn, stringToArray(sha256(username)))) {
-            fseek(usersFile, sizeof(char)*128+sizeof(int), SEEK_SET);
-            for (int j = 0; j < number_of_users; j ++) {
-                char ps[64];
-                fread(ps, sizeof(char), 64, usersFile);
-                if (compare(ps, stringToArray(sha256(password)))) {
-                    debug("You are authorized!");
-                    break;
-                }
+            noUser = 2;
+            fseek(usersFile, sizeof(char)*64*(number_of_users+2+i)+sizeof(int), SEEK_SET);
+            char ps[64];
+            fread(ps, sizeof(char), 64, usersFile);
+            if (compare(ps, stringToArray(sha256(password)))) {
+                return 0;
             }
-            break;
         }
     }
 
-    return false;
+    return noUser;
 }
 
 string getFileHash(const string& filename) {
@@ -233,30 +228,6 @@ string getFileHash(const string& filename) {
     hashed = sha256(hashed);
     data.close();
     return hashed;
-}
-
-char ** readUsers(FILE * file, int n, bool reg=false) {
-    char ** users;
-
-    users = new char * [n+(int)reg];
-    for (int i = 0; i < n; i ++) {
-        users[i] = new char [64];
-        fread(users[i], sizeof(char), 64, file);
-    }
-
-    return users;
-}
-
-char ** readPasswords(FILE * file, int n, bool reg=false) {
-    char ** passwords;
-
-    passwords = new char * [n+(int)reg];
-    for (int i = 0; i < n; i ++) {
-        passwords[i] = new char [64];
-        fread(passwords[i], sizeof(char), 64, file);
-    }
-
-    return passwords;
 }
 
 int registerUser(string username, string password) {
@@ -284,6 +255,7 @@ int registerUser(string username, string password) {
 
     ifstream check("users.dat");
     if (!check) {
+        debug("Users file not found. Creating a new one!");
         string hashed = zero_hash;
         usersFile=fopen("users.dat", "wb");
 
@@ -305,14 +277,16 @@ int registerUser(string username, string password) {
         fwrite(users[0], sizeof(char), 64*number_of_users, usersFile);
         fseek(usersFile, sizeof(char)*64, SEEK_CUR);
         fwrite(passwords[0], sizeof(char), 64*number_of_users, usersFile);
-        fseek(usersFile, 0, SEEK_SET);
 
+        fclose(usersFile);
+
+        usersFile = fopen("users.dat", "rb+");
+
+        writeHash(usersFile, stringToArray(hashed), 1);
         writeHash(usersFile, stringToArray(hashed), 1);
 
         // Calculate file hash sum
         hashed = getFileHash("users.dat");
-        cout << hashed;
-
         // Write hash sum to file
 
         writeHash(usersFile, stringToArray(hashed), 1);
@@ -320,30 +294,47 @@ int registerUser(string username, string password) {
         fclose(usersFile);
         return 1;
     }
+
     check.close();
+    username = sha256(username);
+    password = sha256(password);
 
-    usersFile = fopen("users.dat", "rb");
-
+    usersFile = fopen("users.dat", "rb+");
+    debug("Registering user...");
     int number_of_users;
     fseek(usersFile, sizeof(char) * 64, SEEK_SET);
     fread(&number_of_users, sizeof(int), 1, usersFile);
-    char ** users = readUsers(usersFile, number_of_users, true);
-    char ** passwords = readPasswords(usersFile, number_of_users, true);
+    char ** passwords;
+    passwords = new char * [number_of_users + 1];
 
-    fwrite(users, sizeof(char), 64*number_of_users, usersFile);
-    fwrite(stringToArray(sha256(username)), sizeof(char), 64, usersFile);
-    fwrite(passwords,sizeof(char), 64*number_of_users, usersFile);
-    fwrite(stringToArray(sha256(password)), sizeof(char), 64, usersFile);
+    fseek(usersFile, sizeof(char)*64*(number_of_users+2)+sizeof(int), SEEK_SET);
+    for (int i = 0; i < number_of_users; i ++) {
+        passwords[i] = new char[64];
+        fread(passwords[i], sizeof(char), 64, usersFile);
+        printArr(passwords[i]);
+    }
 
+    passwords[number_of_users] = stringToArray(password);
+    printArr(passwords[number_of_users]);
+
+    number_of_users++;
+
+    fseek(usersFile, sizeof(char)*64, SEEK_SET);
+    fwrite(&number_of_users, sizeof(int), 1, usersFile);
+    fseek(usersFile, sizeof(char)*64*(number_of_users)+sizeof(int), SEEK_SET);
+    fwrite(stringToArray(username), sizeof(char),64,usersFile);
+
+    fseek(usersFile, sizeof(char)*64,SEEK_CUR);
+    for (int i = 0; i < number_of_users; i++)
+        fwrite(passwords[i], sizeof(char), 64, usersFile);
     writeHash(usersFile, stringToArray(zero_hash), number_of_users);
+    writeHash(usersFile, stringToArray(zero_hash), number_of_users);
+
     string hash = getFileHash("users.dat");
+    debug(hash);
+
     writeHash(usersFile, stringToArray(hash), number_of_users);
-
     return 0;
-}
-
-int login(string username, string password) {
-    return 1;
 }
 
 int generateCode() {
@@ -379,14 +370,17 @@ void getParams(string * username, string * password, int argc, char ** argv) {
 int main(int argc, char ** argv) {
     string username, password;
     getParams(&username, &password, argc, argv);
-
-    if (isRegistered(username, password)) login(username, password);
-    else {
+    int loginResult = login(username, password);
+    if (loginResult == 0) debug("Login successful!", true);
+    else if (loginResult == 1) {
         char reg;
         cout << "There is no user with username " << username << "\nDo you want to register a new user? [y/n]: ";
         cin >> reg;
         if (reg=='y') registerUser(username, password);
         else return 1;
+    }
+    else if (loginResult == 2) {
+        debug("Wrong password!", true);
     }
 
     return 0;
