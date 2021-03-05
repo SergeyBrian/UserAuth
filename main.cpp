@@ -334,6 +334,8 @@ int registerUser(string username, string password) {
     debug(hash);
 
     writeHash(usersFile, stringToArray(hash), number_of_users);
+    debug("Registration successful!", true);
+
     return 0;
 }
 
