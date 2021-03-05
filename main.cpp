@@ -3,6 +3,7 @@
 #include <string>
 #include <fstream>
 #include <ctime>
+#include <cstring>
 
 #include "sha256.h"
 
