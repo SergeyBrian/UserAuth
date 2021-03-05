@@ -368,6 +368,7 @@ void getParams(string * username, string * password, int argc, char ** argv) {
 
 
 int main(int argc, char ** argv) {
+    srand(time(nullptr));
     string username, password;
     getParams(&username, &password, argc, argv);
     int loginResult = login(username, password);
