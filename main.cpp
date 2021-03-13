@@ -122,8 +122,8 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
             debug("Can't repair");
             return false;
         }
-        char * trueHash;
-        debug("Hash is damaged, but can be repaired!");
+        char trueHash[64];
+        debug("Hash is damaged, but can be repaired!", true);
         if (compare(hash1,hash2)&&!compare(hash, hash1)) {
             // First hash is broken
             equate(trueHash, hash1);
@@ -136,8 +136,10 @@ bool checkFileHash(FILE * b_file, bool repair=false) {
             // Third hash is broken
             equate(trueHash, hash1);
         }
+        fseek(b_file, 0, SEEK_SET);
         writeHash(b_file, trueHash, number_of_users);
-        debug("Hash successfully repaired!");
+        writeHash(tmp, trueHash, number_of_users);
+        debug("Hash successfully repaired!", true);
         equate(hash,trueHash);
     }
 
@@ -175,7 +177,7 @@ int login(const string& username, const string& password) {
 
     debug("Data file exists");
 
-    FILE * usersFile = fopen("users.dat", "rb");
+    FILE * usersFile = fopen("users.dat", "rb+");
 
     if (!checkFileHash(usersFile, true)) {
         debug("Users data file is broken and unrepairable. Report can be found in log.txt!", true);
@@ -367,7 +369,6 @@ void getParams(string * username, string * password, int argc, char ** argv) {
     cout << "Enter password: ";
     cin >> *password;
 }
-
 
 
 int main(int argc, char ** argv) {
